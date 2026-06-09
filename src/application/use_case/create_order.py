@@ -1,28 +1,12 @@
-from uuid import UUID
 from src.domain.entities.order import Order
 from src.domain.repositories.order_repository import AbstractOrderRepository
-from src.application.ports.first_service_client import AbstractFirstServiceClient
-from src.domain.exceptions import ExternalServiceError
+from uuid import UUID
 
 
 class CreateOrderUseCase:
-    def __init__(
-        self,
-        repository: AbstractOrderRepository,
-        client: AbstractFirstServiceClient,
-    ):
+    def __init__(self, repository: AbstractOrderRepository):
         self.repository = repository
-        self.client = client
 
-    async def execute(self, order_id: UUID) -> Order:
-        try:
-            external_data = await self.client.get_order(order_id)
-        except Exception as e:
-            raise ExternalServiceError() from e
-        order = Order(
-            id=order_id,
-            title=external_data.get("title", ""),
-            price=external_data.get("price", 0.0),
-            description=external_data.get("description", ""),
-        )
+    async def execute(self, title: str, price: float, description: str = "", user_id: UUID | None = None) -> Order:
+        order = Order(title=title, price=price, description=description, user_id=user_id)
         return await self.repository.create(order)

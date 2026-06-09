@@ -3,7 +3,6 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 from src.application.use_case.create_order import CreateOrderUseCase
 from src.domain.entities.order import Order
-from src.domain.exceptions import ExternalServiceError
 
 
 @pytest.fixture
@@ -11,24 +10,34 @@ def mock_repo():
     return AsyncMock()
 
 
-@pytest.fixture
-def mock_client():
-    return AsyncMock()
+async def test_create_order_saves_to_repo(mock_repo):
+    mock_repo.create.return_value = Order(title="New", price=50.0, description="desc")
 
-
-async def test_create_order_saves_to_db(mock_repo, mock_client):
-    order_id = uuid4()
-    mock_client.get_order.return_value = {"title": "New", "price": 50.0, "description": "desc"}
-    mock_repo.create.return_value = Order(id=order_id, title="New", price=50.0)
-
-    result = await CreateOrderUseCase(mock_repo, mock_client).execute(order_id)
+    result = await CreateOrderUseCase(mock_repo).execute(
+        title="New", price=50.0, description="desc"
+    )
 
     mock_repo.create.assert_called_once()
     assert result.title == "New"
 
 
-async def test_create_order_raises_external_service_error(mock_repo, mock_client):
-    mock_client.get_order.side_effect = Exception("timeout")
+async def test_create_order_with_user_id(mock_repo):
+    user_id = uuid4()
+    mock_repo.create.return_value = Order(title="Order", price=10.0, user_id=user_id)
 
-    with pytest.raises(ExternalServiceError):
-        await CreateOrderUseCase(mock_repo, mock_client).execute(uuid4())
+    result = await CreateOrderUseCase(mock_repo).execute(
+        title="Order", price=10.0, user_id=user_id
+    )
+
+    assert result.user_id == user_id
+
+
+async def test_create_order_passes_correct_data_to_repo(mock_repo):
+    mock_repo.create.return_value = Order(title="A", price=1.0)
+
+    await CreateOrderUseCase(mock_repo).execute(title="A", price=1.0, description="B")
+
+    created_order = mock_repo.create.call_args[0][0]
+    assert created_order.title == "A"
+    assert created_order.price == 1.0
+    assert created_order.description == "B"

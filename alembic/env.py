@@ -17,7 +17,7 @@ from src.infrastructure.config import settings
 
 target_metadata = Base.metadata
 
-config.set_main_option("sqlalchemy.url", "postgresql+psycopg://postgres:123456@127.0.0.1:5433/postgres")
+config.set_main_option("sqlalchemy.url", "postgresql+psycopg://postgres:123456@127.0.0.1:5432/orders_db")
 
 def run_migrations_offline() -> None:
     url = config.get_main_option("sqlalchemy.url")

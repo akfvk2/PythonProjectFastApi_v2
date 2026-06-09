@@ -1,23 +1,17 @@
-import httpx
 from fastapi import FastAPI, APIRouter
 from fastapi.responses import UJSONResponse
 from starlette.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from src.presentation.api.router import router as orders_router
-from src.infrastructure.http.first_service_client import HttpxFirstServiceClient
-from src.infrastructure.config import settings
 from redis.asyncio import Redis
+from src.infrastructure.config import settings
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     redis = Redis.from_url(settings.redis_url, decode_responses=True)
     app.state.redis = redis
-
-    async with httpx.AsyncClient(base_url=settings.first_service_url) as client:
-        app.state.first_service_client = HttpxFirstServiceClient(client)
-        yield
-
+    yield
     await redis.aclose()
 
 

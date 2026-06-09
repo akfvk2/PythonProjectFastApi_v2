@@ -7,6 +7,7 @@ from src.domain.repositories.order_repository import AbstractOrderRepository
 
 CACHE_TTL = 3600
 
+
 class CachedOrderRepository(AbstractOrderRepository):
     def __init__(self, repo: AbstractOrderRepository, redis: Redis):
         self._repo = repo
@@ -23,6 +24,7 @@ class CachedOrderRepository(AbstractOrderRepository):
             "description": order.description,
             "status": order.status.value,
             "created_at": order.created_at.isoformat(),
+            "user_id": str(order.user_id) if order.user_id else None,
         })
 
     def _deserialize(self, data: str) -> Order:
@@ -34,6 +36,7 @@ class CachedOrderRepository(AbstractOrderRepository):
             description=d["description"],
             status=OrderStatus(d["status"]),
             created_at=datetime.fromisoformat(d["created_at"]),
+            user_id=UUID(d["user_id"]) if d.get("user_id") else None,
         )
 
     async def get_by_id(self, order_id: UUID) -> Order | None:
@@ -52,3 +55,6 @@ class CachedOrderRepository(AbstractOrderRepository):
 
     async def get_all(self) -> list[Order]:
         return await self._repo.get_all()
+
+    async def get_by_user_id(self, user_id: UUID) -> list[Order]:
+        return await self._repo.get_by_user_id(user_id)

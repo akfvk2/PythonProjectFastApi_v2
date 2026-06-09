@@ -16,3 +16,7 @@ class AbstractOrderRepository(ABC):
     @abstractmethod
     async def get_all(self) -> list[Order]:
         raise NotImplementedError
+
+    @abstractmethod
+    async def get_by_user_id(self, user_id: UUID) -> list[Order]:
+        raise NotImplementedError

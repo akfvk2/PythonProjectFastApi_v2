@@ -5,7 +5,7 @@ from src.infrastructure.db.order_repo_impl import SQLAlchemyOrderRepository
 from src.domain.entities.order import Order
 from uuid import uuid4
 
-TEST_DB_URL = "postgresql+asyncpg://postgres:123456@127.0.0.1:5433/postgres"
+TEST_DB_URL = "postgresql+asyncpg://postgres:123456@127.0.0.1:5432/orders_db"
 
 
 @pytest.fixture

@@ -5,7 +5,11 @@ from src.domain.entities.order import OrderStatus
 
 
 class OrderCreate(BaseModel):
-    order_id: UUID
+    title: str
+    price: float
+    description: str = ""
+    user_id: UUID | None = None
+
 
 class OrderRead(BaseModel):
     id: UUID
@@ -14,6 +18,6 @@ class OrderRead(BaseModel):
     description: str
     status: OrderStatus
     created_at: datetime
-    external_data: dict = {}
+    user_id: UUID | None = None
 
     model_config = ConfigDict(from_attributes=True)

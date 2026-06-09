@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 from src.application.use_case.get_order import GetOrderUseCase
 from src.domain.entities.order import Order
-from src.domain.exceptions import OrderNotFoundError, ExternalServiceError
+from src.domain.exceptions import OrderNotFoundError
 
 
 @pytest.fixture
@@ -11,33 +11,28 @@ def mock_repo():
     return AsyncMock()
 
 
-@pytest.fixture
-def mock_client():
-    return AsyncMock()
-
-
-async def test_get_order_returns_order_with_external_data(mock_repo, mock_client):
+async def test_get_order_returns_order(mock_repo):
     order_id = uuid4()
     order = Order(id=order_id, title="Test", price=100.0)
     mock_repo.get_by_id.return_value = order
-    mock_client.get_order.return_value = {"title": "Test", "extra": "data"}
 
-    result = await GetOrderUseCase(mock_repo, mock_client).execute(order_id)
+    result = await GetOrderUseCase(mock_repo).execute(order_id)
 
     assert result.id == order_id
-    assert result.external_data == {"title": "Test", "extra": "data"}
+    assert result.title == "Test"
 
 
-async def test_get_order_raises_not_found(mock_repo, mock_client):
+async def test_get_order_raises_not_found(mock_repo):
     mock_repo.get_by_id.return_value = None
-    mock_client.get_order.return_value = {}
 
     with pytest.raises(OrderNotFoundError):
-        await GetOrderUseCase(mock_repo, mock_client).execute(uuid4())
+        await GetOrderUseCase(mock_repo).execute(uuid4())
 
 
-async def test_get_order_raises_external_service_error(mock_repo, mock_client):
-    mock_client.get_order.side_effect = Exception("connection error")
+async def test_get_order_calls_repo_with_correct_id(mock_repo):
+    order_id = uuid4()
+    mock_repo.get_by_id.return_value = Order(id=order_id, title="T", price=1.0)
 
-    with pytest.raises(ExternalServiceError):
-        await GetOrderUseCase(mock_repo, mock_client).execute(uuid4())
+    await GetOrderUseCase(mock_repo).execute(order_id)
+
+    mock_repo.get_by_id.assert_called_once_with(order_id)

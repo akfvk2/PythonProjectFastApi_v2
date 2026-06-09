@@ -6,7 +6,7 @@ ENV PYTHONUNBUFFERED=1 \
     POETRY_VIRTUALENVS_IN_PROJECT=1 \
     POETRY_VIRTUALENVS_CREATE=1 \
     POETRY_CACHE_DIR=/tmp/poetry_cache \
-    POETRY_VERSION=1.9.0
+    POETRY_VERSION=1.8.5
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \

@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from uuid import UUID, uuid4
 from datetime import datetime
 from enum import Enum
+from typing import Optional
 
 
 class OrderStatus(Enum):
@@ -18,4 +19,4 @@ class Order:
     status: OrderStatus = OrderStatus.PENDING
     created_at: datetime = field(default_factory=datetime.utcnow)
     description: str = ""
-    external_data: dict = field(default_factory=dict)
+    user_id: Optional[UUID] = None

@@ -18,6 +18,7 @@ class SQLAlchemyOrderRepository(AbstractOrderRepository):
             price=order.price,
             status=order.status,
             created_at=order.created_at,
+            user_id=order.user_id,
         )
         self.session.add(model)
         await self.session.flush()
@@ -33,6 +34,12 @@ class SQLAlchemyOrderRepository(AbstractOrderRepository):
         result = await self.session.execute(select(OrderModel))
         return [self._to_entity(m) for m in result.scalars().all()]
 
+    async def get_by_user_id(self, user_id: UUID) -> list[Order]:
+        result = await self.session.execute(
+            select(OrderModel).where(OrderModel.user_id == user_id)
+        )
+        return [self._to_entity(m) for m in result.scalars().all()]
+
     def _to_entity(self, model: OrderModel) -> Order:
         return Order(
             id=model.id,
@@ -41,4 +48,5 @@ class SQLAlchemyOrderRepository(AbstractOrderRepository):
             price=model.price,
             status=model.status,
             created_at=model.created_at,
+            user_id=model.user_id,
         )
