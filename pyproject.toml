@@ -29,7 +29,8 @@ build-backend = "poetry.core.masonry.api"
 [dependency-groups]
 dev = [
     "pytest (>=9.0.3,<10.0.0)",
-    "pytest-asyncio (>=1.4.0,<2.0.0)"
+    "pytest-asyncio (>=1.4.0,<2.0.0)",
+    "testcontainers (>=4.14.2,<5.0.0)"
 ]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

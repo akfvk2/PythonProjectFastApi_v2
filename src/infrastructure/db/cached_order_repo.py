@@ -4,8 +4,10 @@ from datetime import datetime
 from redis.asyncio import Redis
 from src.domain.entities.order import Order, OrderStatus
 from src.domain.repositories.order_repository import AbstractOrderRepository
+from src.infrastructure.config import settings
 
-CACHE_TTL = 3600
+
+
 
 
 class CachedOrderRepository(AbstractOrderRepository):
@@ -40,17 +42,26 @@ class CachedOrderRepository(AbstractOrderRepository):
         )
 
     async def get_by_id(self, order_id: UUID) -> Order | None:
-        cached = await self._redis.get(self._key(order_id))
-        if cached:
-            return self._deserialize(cached)
+        try:
+            cached = await self._redis.get(self._key(order_id))
+            if cached:
+                return self._deserialize(cached)
+        except Exception:
+            pass
         order = await self._repo.get_by_id(order_id)
         if order:
-            await self._redis.setex(self._key(order_id), CACHE_TTL, self._serialize(order))
+            try:
+                await self._redis.set(self._key(order_id), self._serialize(order), ex=settings.cache_ttl)
+            except Exception:
+                pass
         return order
 
     async def create(self, order: Order) -> Order:
         created = await self._repo.create(order)
-        await self._redis.setex(self._key(created.id), CACHE_TTL, self._serialize(created))
+        try:
+            await self._redis.set(self._key(created.id), self._serialize(created), ex=settings.cache_ttl)
+        except Exception:
+            pass
         return created
 
     async def get_all(self) -> list[Order]:

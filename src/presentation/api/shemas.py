@@ -8,7 +8,7 @@ class OrderCreate(BaseModel):
     title: str
     price: float
     description: str = ""
-    user_id: UUID | None = None
+    user_id: UUID
 
 
 class OrderRead(BaseModel):

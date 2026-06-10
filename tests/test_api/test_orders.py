@@ -58,7 +58,11 @@ def test_create_order_returns_201(client, sample_order):
         "src.application.use_case.create_order.CreateOrderUseCase.execute",
         new=AsyncMock(return_value=sample_order),
     ):
-        response = client.post("/v1/orders/", json={"title": "Test", "price": 100.0})
+        response = client.post("/v1/orders/", json={
+            "title": "Test",
+            "price": 100.0,
+            "user_id": str(uuid4())
+        })
 
     assert response.status_code == 201
 

@@ -6,12 +6,13 @@ from src.domain.entities.order import OrderStatus
 from datetime import datetime, timezone
 
 
-def test_order_create_valid():
-    order = OrderCreate(title="Test Order", price=99.9)
+def test_order_create_with_required_fields():
+    user_id = uuid4()
+    order = OrderCreate(title="Test Order", price=99.9, user_id=user_id)
     assert order.title == "Test Order"
     assert order.price == 99.9
     assert order.description == ""
-    assert order.user_id is None
+    assert order.user_id == user_id
 
 
 def test_order_create_with_all_fields():

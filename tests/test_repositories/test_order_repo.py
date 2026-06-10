@@ -1,28 +1,37 @@
 import pytest
+import pytest_asyncio
+from sqlalchemy.pool import NullPool
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from testcontainers.postgres import PostgresContainer
 from src.infrastructure.db.models import Base
 from src.infrastructure.db.order_repo_impl import SQLAlchemyOrderRepository
 from src.domain.entities.order import Order
 from uuid import uuid4
 
-TEST_DB_URL = "postgresql+asyncpg://postgres:123456@127.0.0.1:5432/orders_db"
+
+@pytest.fixture(scope="session")
+def postgres_container():
+    with PostgresContainer("postgres:16") as container:
+        yield container
 
 
-@pytest.fixture
-async def engine():
-    engine = create_async_engine(TEST_DB_URL)
+@pytest.fixture(scope="session")
+def db_url(postgres_container):
+    return postgres_container.get_connection_url().replace(
+        "postgresql+psycopg2://", "postgresql+asyncpg://"
+    )
+
+
+@pytest_asyncio.fixture
+async def session(db_url):
+    engine = create_async_engine(db_url, poolclass=NullPool)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    yield engine
-    await engine.dispose()
-
-
-@pytest.fixture
-async def session(engine):
     factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     async with factory() as s:
         yield s
         await s.rollback()
+    await engine.dispose()
 
 
 @pytest.fixture
