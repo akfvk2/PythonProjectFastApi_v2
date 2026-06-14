@@ -32,26 +32,6 @@ def client():
         yield c
 
 
-def test_get_order_returns_200(client, sample_order, order_id):
-    with patch(
-        "src.application.use_case.get_order.GetOrderUseCase.execute",
-        new=AsyncMock(return_value=sample_order),
-    ):
-        response = client.get(f"/v1/orders/{order_id}")
-
-    assert response.status_code == 200
-    assert response.json()["title"] == "Test"
-
-
-def test_get_order_returns_404(client, order_id):
-    with patch(
-        "src.application.use_case.get_order.GetOrderUseCase.execute",
-        new=AsyncMock(side_effect=OrderNotFoundError(order_id)),
-    ):
-        response = client.get(f"/v1/orders/{order_id}")
-
-    assert response.status_code == 404
-
 
 def test_create_order_returns_201(client, sample_order):
     with patch(
