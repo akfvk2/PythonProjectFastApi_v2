@@ -9,6 +9,7 @@ SessionFactory = async_sessionmaker(
     expire_on_commit=False,
 )
 
+
 async def get_session() -> AsyncSession:
     async with SessionFactory() as session:
         try:

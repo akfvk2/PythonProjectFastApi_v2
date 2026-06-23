@@ -1,8 +1,8 @@
 import pytest
 from uuid import uuid4, UUID
 from pydantic import ValidationError
-from src.presentation.api.schemas import OrderCreate, OrderRead
-from src.domain.entities.order import OrderStatus
+from src.orders.schemas import OrderCreate, OrderRead
+from src.orders.models import OrderStatus
 from datetime import datetime, timezone
 
 

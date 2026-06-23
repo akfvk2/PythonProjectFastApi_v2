@@ -3,7 +3,7 @@ import asyncio
 
 async def main() -> None:
     uvicorn.run(
-        "presentation.api.application:get_app",
+        "src.application:get_app",
         host="localhost",
         port=8001,
         reload=True,

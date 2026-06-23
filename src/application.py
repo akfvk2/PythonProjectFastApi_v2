@@ -1,11 +1,7 @@
 from fastapi import FastAPI, APIRouter
 from fastapi.responses import UJSONResponse
 from starlette.middleware.cors import CORSMiddleware
-from src.presentation.api.router import router as orders_router
-
-
-
-
+from src.orders.router import router as orders_router
 
 
 def get_app() -> FastAPI:

@@ -3,9 +3,8 @@ import pytest_asyncio
 from sqlalchemy.pool import NullPool
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from testcontainers.postgres import PostgresContainer
-from src.infrastructure.db.models import Base
-from src.infrastructure.db.order_repo_impl import SQLAlchemyOrderRepository
-from src.domain.entities.order import Order
+from src.orders.models import Base, OrderModel
+from src.orders.repository import SQLAlchemyOrderRepository
 from uuid import uuid4
 
 
@@ -40,14 +39,14 @@ def repo(session):
 
 
 async def test_create_order(repo):
-    order = Order(title="Test", price=99.9)
+    order = OrderModel(title="Test", price=99.9)
     created = await repo.create(order)
     assert created.id == order.id
     assert created.title == "Test"
 
 
 async def test_get_by_id_returns_order(repo):
-    order = Order(title="Find me", price=10.0)
+    order = OrderModel(title="Find me", price=10.0)
     await repo.create(order)
     found = await repo.get_by_id(order.id)
     assert found is not None
@@ -60,7 +59,7 @@ async def test_get_by_id_returns_none_if_not_exists(repo):
 
 
 async def test_get_all_returns_list(repo):
-    await repo.create(Order(title="Order 1", price=1.0))
-    await repo.create(Order(title="Order 2", price=2.0))
+    await repo.create(OrderModel(title="Order 1", price=1.0))
+    await repo.create(OrderModel(title="Order 2", price=2.0))
     all_orders = await repo.get_all()
     assert len(all_orders) >= 2

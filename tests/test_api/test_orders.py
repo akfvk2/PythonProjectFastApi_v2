@@ -2,10 +2,11 @@ import pytest
 from uuid import uuid4
 from fastapi.testclient import TestClient
 from unittest.mock import AsyncMock, patch
-from src.presentation.api.application import get_app
-from src.domain.entities.order import Order, OrderStatus
-from src.domain.exceptions import OrderNotFoundError
+from src.application import get_app
+from src.orders.schemas import OrderRead
+from src.orders.models import OrderStatus
 from datetime import datetime, timezone
+
 
 
 @pytest.fixture
@@ -15,7 +16,7 @@ def order_id():
 
 @pytest.fixture
 def sample_order(order_id):
-    return Order(
+    return OrderRead(
         id=order_id,
         title="Test",
         price=100.0,
@@ -35,7 +36,7 @@ def client():
 
 def test_create_order_returns_201(client, sample_order):
     with patch(
-        "src.application.use_case.create_order.CreateOrderUseCase.execute",
+        "src.orders.service.OrderService.create_order",
         new=AsyncMock(return_value=sample_order),
     ):
         response = client.post("/v1/orders/", json={

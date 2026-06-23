@@ -1,7 +1,7 @@
 from pydantic import BaseModel, ConfigDict
 from uuid import UUID
 from datetime import datetime
-from src.domain.entities.order import OrderStatus
+from src.orders.models import OrderStatus
 
 
 class OrderCreate(BaseModel):
