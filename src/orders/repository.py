@@ -12,19 +12,12 @@ class AbstractOrderRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def get_by_id(self, order_id: UUID) -> OrderModel | None:
-        raise NotImplementedError
-
-    @abstractmethod
-    async def get_all(self) -> list[OrderModel]:
-        raise NotImplementedError
-
-    @abstractmethod
-    async def get_by_user_id(self, user_id: UUID) -> list[OrderModel]:
+    async def get_by_user_id(self, order_id: UUID) -> OrderModel | None:
         raise NotImplementedError
 
 
-class SQLAlchemyOrderRepository(AbstractOrderRepository):
+
+class OrderRepository(AbstractOrderRepository):
     def __init__(self, session: AsyncSession):
         self.session = session
 
@@ -33,12 +26,6 @@ class SQLAlchemyOrderRepository(AbstractOrderRepository):
         await self.session.flush()
         return order
 
-    async def get_by_id(self, order_id: UUID) -> OrderModel | None:
-        return await self.session.get(OrderModel, order_id)
-
-    async def get_all(self) -> list[OrderModel]:
-        result = await self.session.execute(select(OrderModel))
-        return list(result.scalars().all())
 
     async def get_by_user_id(self, user_id: UUID) -> list[OrderModel]:
         result = await self.session.execute(

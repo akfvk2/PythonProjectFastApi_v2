@@ -1,8 +1,11 @@
-from fastapi import FastAPI, APIRouter
+from fastapi import FastAPI
 from fastapi.responses import UJSONResponse
 from starlette.middleware.cors import CORSMiddleware
 from src.orders.router import router as orders_router
 
+
+def _setup_routers(app: FastAPI) -> None:
+    app.include_router(orders_router, prefix="/v1/orders", tags=["orders"])
 
 def get_app() -> FastAPI:
     app = FastAPI(
@@ -19,8 +22,6 @@ def get_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    api_v1_router = APIRouter(prefix="/v1")
-    api_v1_router.include_router(orders_router, prefix="/orders", tags=["orders"])
-    app.include_router(api_v1_router)
+    _setup_routers(app)
 
     return app
