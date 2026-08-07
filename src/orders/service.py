@@ -16,6 +16,7 @@ class OrderService:
             price=order_in.price,
             description=order_in.description,
             user_id=order_in.user_id,
+            reference_id=order_in.reference_id,
         )
 
 
@@ -29,3 +30,9 @@ class OrderService:
         if not orders:
             raise OrderNotFoundError(user_id)
         return [OrderRead.model_validate(o) for o in orders]
+
+    async def get_order_by_reference_id(self, reference_id: UUID) -> OrderRead | None:
+        order = await self.repository.get_by_reference_id(reference_id)
+        if not order:
+            return None
+        return OrderRead.model_validate(order)

@@ -9,7 +9,7 @@ class OrderCreate(BaseModel):
     price: float
     description: str = ""
     user_id: UUID
-
+    reference_id: UUID | None = None
 
 class OrderRead(BaseModel):
     id: UUID
@@ -19,5 +19,6 @@ class OrderRead(BaseModel):
     status: OrderStatus
     created_at: datetime
     user_id: UUID | None = None
+    reference_id: UUID | None = None
 
     model_config = ConfigDict(from_attributes=True)

@@ -8,6 +8,10 @@ from src.orders.models import OrderModel
 class AbstractOrderRepository(ABC):
 
     @abstractmethod
+    async def get_by_reference_id(self, reference_id: UUID) -> OrderModel | None:
+        raise NotImplementedError
+
+    @abstractmethod
     async def create(self, order: OrderModel) -> OrderModel:
         raise NotImplementedError
 
@@ -20,6 +24,12 @@ class AbstractOrderRepository(ABC):
 class OrderRepository(AbstractOrderRepository):
     def __init__(self, session: AsyncSession):
         self.session = session
+
+    async def get_by_reference_id(self, reference_id: UUID) -> OrderModel | None:
+        result = await self.session.execute(
+            select(OrderModel).where(OrderModel.reference_id == reference_id)
+        )
+        return result.scalar_one_or_none()
 
     async def create(self, order: OrderModel) -> OrderModel:
         self.session.add(order)
