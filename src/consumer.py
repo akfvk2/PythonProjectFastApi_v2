@@ -1,41 +1,43 @@
 import asyncio
-import json
 import logging
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 from src.config import settings
-from src.cache import redis_client
+from src.student_event_schemas import StudentEvent
+from src.student_event_handler import StudentEventService
+import json
+from pydantic import ValidationError
+from src.database import SessionFactory
 
 logger = logging.getLogger(__name__)
 
-MAX_ATTEMPTS = 3
+_handler = StudentEventService()
 
 
-def _handle_event(data: dict) -> None:
-    logger.info(f"New student created: {data}")
-
+async def _process_once(message) -> None:
+    data = json.loads(message.value.decode("utf-8"))
+    event = StudentEvent.model_validate(data)
+    async with SessionFactory() as session:
+        await _handler.handle(event, session)
 
 async def _process_message(message, dlq_producer: AIOKafkaProducer) -> None:
-    for attempt in range(1, MAX_ATTEMPTS + 1):
+    for attempt in range(1, settings.max_attempts + 1):
         try:
-            data = json.loads(message.value.decode("utf-8"))
-            event_id = data.get("event_id")
-            if event_id is not None:
-                already_processed = await redis_client.get(f"processed_event:{event_id}")
-                if already_processed:
-                    logger.info(f"Event {event_id} already processed, skipping duplicate")
-                    return
-            _handle_event(data)
-            if event_id is not None:
-                await redis_client.setex(f"processed_event:{event_id}", settings.dedup_ttl_seconds, "1")
+            await _process_once(message)
+            return
+        except (json.JSONDecodeError, ValidationError):
+            logger.exception(f"Non-retryable error for offset {message.offset}, sending straight to DLQ")
+            await dlq_producer.send_and_wait(
+                settings.student_events_dlq_topic,
+                key=message.key,
+                value=message.value)
             return
         except Exception:
-            logger.exception(f"Attempt {attempt}/{MAX_ATTEMPTS} failed for offset {message.offset}")
-            if attempt == MAX_ATTEMPTS:
+            logger.exception(f"Attempt {attempt}/{settings.max_attempts} failed for offset {message.offset}")
+            if attempt == settings.max_attempts:
                 await dlq_producer.send_and_wait(
                     settings.student_events_dlq_topic,
                     key=message.key,
-                    value=message.value,
-                )
+                    value=message.value)
                 return
             await asyncio.sleep(1)
 
