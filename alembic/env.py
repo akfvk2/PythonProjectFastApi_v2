@@ -13,7 +13,6 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 from src.orders.models import Base
-from src.processed_event_model import ProcessedEventModel
 
 target_metadata = Base.metadata
 

@@ -5,7 +5,7 @@ from src.orders.router import router as orders_router
 from contextlib import asynccontextmanager
 import asyncio
 import contextlib
-from src.consumer import run_student_events_consumer
+from src.students.consumer import run_student_events_consumer
 import logging
 
 @asynccontextmanager

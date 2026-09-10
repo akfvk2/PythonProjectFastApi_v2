@@ -9,5 +9,6 @@ class Settings(BaseSettings):
     student_events_group_id: str = "order-service-student-events"
     dedup_ttl_seconds: int = 86400
     max_attempts: int = 3
+    retry_delay_seconds: int = 1
 
 settings = Settings()
