@@ -10,5 +10,6 @@ class Settings(BaseSettings):
     dedup_ttl_seconds: int = 86400
     max_attempts: int = 3
     retry_delay_seconds: int = 1
+    max_poll_interval_seconds: int = 300
 
 settings = Settings()

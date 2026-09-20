@@ -3,18 +3,12 @@ from fastapi.responses import UJSONResponse
 from starlette.middleware.cors import CORSMiddleware
 from src.orders.router import router as orders_router
 from contextlib import asynccontextmanager
-import asyncio
-import contextlib
-from src.students.consumer import run_student_events_consumer
 import logging
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    task = asyncio.create_task(run_student_events_consumer())
     yield
-    task.cancel()
-    with contextlib.suppress(asyncio.CancelledError):
-        await task
+
 
 def _setup_routers(app: FastAPI) -> None:
     app.include_router(orders_router, prefix="/v1/orders", tags=["orders"])
