@@ -1,6 +1,6 @@
 import logging
 from src.students.student_event_schemas import StudentEvent
-from src.students.processed_event_repository import ProcessedEventRepository
+from src.inbox.processed_event_repository import ProcessedEventRepository
 
 logger = logging.getLogger(__name__)
 

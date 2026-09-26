@@ -11,5 +11,9 @@ class Settings(BaseSettings):
     max_attempts: int = 3
     retry_delay_seconds: int = 1
     max_poll_interval_seconds: int = 300
+    max_retry_delay_seconds: int = 10
+    student_events_retry_topic: str = "student-events-retry"
+    student_events_retry_group_id: str = "order-service-student-events-retry"
+
 
 settings = Settings()

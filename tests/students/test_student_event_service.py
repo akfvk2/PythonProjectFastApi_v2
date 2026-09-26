@@ -1,13 +1,14 @@
 import pytest
-from unittest.mock import AsyncMock
 from uuid import uuid4
 from src.students.student_event_service import StudentEventService
 from src.students.student_event_schemas import StudentEvent
-
+from sqlalchemy import select, func
+from src.inbox.processed_event_repository import ProcessedEventRepository
+from src.inbox.processed_event_model import ProcessedEventModel
 
 @pytest.fixture
-def mock_repo():
-    return AsyncMock()
+def service(session):
+    return StudentEventService(ProcessedEventRepository(session))
 
 def make_event() -> StudentEvent:
     return StudentEvent(
@@ -17,23 +18,27 @@ def make_event() -> StudentEvent:
         name="Ivan",
     )
 
-async def test_handle_new_event_calls_repo_with_event_id(mock_repo):
-    mock_repo.try_mark_processed.return_value = True
-    event = make_event()
-    await StudentEventService(mock_repo).handle(event)
-    mock_repo.try_mark_processed.assert_called_once_with(event.event_id)
+async def count_processed(session, event_id) -> int:
+    result = await session.execute(
+        select(func.count()).select_from(ProcessedEventModel).where(ProcessedEventModel.event_id == event_id)
+    )
+    return result.scalar_one()
 
-async def test_handle_new_event_logs_created(mock_repo, caplog):
-    mock_repo.try_mark_processed.return_value = True
+async def test_handle_new_event_marks_it_processed(service, session):
     event = make_event()
+    await service.handle(event)
+    assert await count_processed(session, event.event_id) == 1
+
+
+async def test_handle_new_event_logs_created(service, caplog):
     with caplog.at_level("INFO"):
-        await StudentEventService(mock_repo).handle(event)
+        await service.handle(make_event())
     assert "New student created" in caplog.text
 
-async def test_handle_duplicate_event_skips_without_creating(mock_repo, caplog):
-    mock_repo.try_mark_processed.return_value = False
+async def test_handle_duplicate_event_is_skipped(service, session, caplog):
     event = make_event()
+    await service.handle(event)
     with caplog.at_level("INFO"):
-        await StudentEventService(mock_repo).handle(event)
+        await service.handle(event)
+    assert await count_processed(session, event.event_id) == 1
     assert "already processed" in caplog.text
-    assert "New student created" not in caplog.text

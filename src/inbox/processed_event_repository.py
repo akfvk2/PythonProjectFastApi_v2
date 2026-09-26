@@ -3,8 +3,8 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from src.students.processed_event_model import ProcessedEventModel
-from src.students.exceptions import RetryException
+from src.inbox.processed_event_model import ProcessedEventModel
+from src.exceptions import RetryException
 
 logger = logging.getLogger(__name__)
 
