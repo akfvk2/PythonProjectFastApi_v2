@@ -21,3 +21,12 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+
+  worker:
+    build: .
+    command: python -m src.consumer_main
+    environment:
+      postgres_url: postgresql+asyncpg://postgres:123456@postgres:5432/postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
