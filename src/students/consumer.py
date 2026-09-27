@@ -8,11 +8,14 @@ from src.students.student_event_service import StudentEventService
 import json
 from pydantic import ValidationError
 from src.database import SessionFactory
-from src.exceptions import RetryException
+from src.exceptions import RetryException, InvalidConfigurationError
 from typing import Callable
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from aiokafka import TopicPartition
 from src.inbox.processed_event_repository import ProcessedEventRepository
+from sqlalchemy.exc import OperationalError
+
+
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +43,7 @@ def _meta_headers(message, exc: Exception, attempt: int) -> list[tuple[str, byte
 def _check_retry_budget() -> None:
     limit_seconds = settings.max_poll_interval_seconds
     if settings.max_retry_delay_seconds >= limit_seconds * 0.5:
-        raise ValueError(
+        raise InvalidConfigurationError(
             f"Retry budget ({settings.max_retry_delay_seconds}s) is too close to "
             f"max_poll_interval_seconds ({limit_seconds}s) — consumer would lose its partition."
             f"Lower max_attempts / max_retry_delay_seconds or raise max_poll_interval_seconds."
@@ -50,9 +53,14 @@ async def _process_once(message, handler_factory: Callable[[AsyncSession], Stude
                         session_factory: async_sessionmaker[AsyncSession],) -> None:
     data = json.loads(message.value.decode("utf-8"))
     event = StudentEvent.model_validate(data)
-    async with session_factory.begin() as session:
-        handler = handler_factory(session)
-        await  handler.handle(event)
+    try:
+        async with session_factory.begin() as session:
+            handler = handler_factory(session)
+            await  handler.handle(event)
+    except OperationalError as exc:
+        raise RetryException(
+            f"Temporary DB error while processing event {event.event_id}", retry_delay=5.0,
+        ) from exc
 
 async def _send_to_dlq(producer: AIOKafkaProducer, message, exc: Exception, attempt: int) -> None:
     await producer.send_and_wait(
@@ -75,7 +83,12 @@ async def _schedule_retry(producer: AIOKafkaProducer, message, exc: RetryExcepti
 
 async def _process_message(message, producer: AIOKafkaProducer, handler_factory: Callable[[AsyncSession], StudentEventService],
                            session_factory: async_sessionmaker[AsyncSession],) -> None:
-    attempt = _attempt_number(message)
+    try:
+        attempt = _attempt_number(message)
+    except ValueError as exc:
+        logger.exception(f"Malformed 'attempts' header for offset {message.offset}, sending straight to DLQ")
+        await _send_to_dlq(producer, message, exc, attempt=1)
+        return
     try:
         await _process_once(message, handler_factory, session_factory)
         return
@@ -91,14 +104,13 @@ async def _process_message(message, producer: AIOKafkaProducer, handler_factory:
             await _schedule_retry(producer, message, exc, attempt)
 
 
-async def _wait_until_due(message) -> None:
+
+
+def _remaining_delay(message) -> float:
     retry_at = _header(message, "retry_at")
     if retry_at is None:
-        return
-    remaining = float(retry_at) - time.time()
-    if remaining > 0:
-        await asyncio.sleep(min(remaining, settings.max_retry_delay_seconds))
-
+        return 0.0
+    return float(retry_at) - time.time()
 
 async def _consume(
     topic: str,
@@ -119,12 +131,24 @@ async def _consume(
     producer = AIOKafkaProducer(bootstrap_servers=settings.kafka_bootstrap_servers)
     await consumer.start()
     await producer.start()
+    loop = asyncio.get_event_loop()
     try:
         async for message in consumer:
-            if wait_for_retry_at:
-                await _wait_until_due(message)
-            await _process_message(message, producer, handler_factory, session_factory)
             tp = TopicPartition(message.topic, message.partition)
+            if wait_for_retry_at:
+                try:
+                    remaining = _remaining_delay(message)
+                except ValueError as exc:
+                    logger.exception(f"Malformed 'retry_at' header for offset {message.offset}, sending straight to DLQ")
+                    await _send_to_dlq(producer, message, exc, attempt=1)
+                    await consumer.commit({tp: message.offset + 1})
+                    continue
+                if remaining > 0:
+                    consumer.seek(tp, message.offset)
+                    consumer.pause(tp)
+                    loop.call_later(remaining, consumer.resume, tp)
+                    continue
+            await _process_message(message, producer, handler_factory, session_factory)
             await consumer.commit({tp: message.offset + 1})
     finally:
         await consumer.stop()

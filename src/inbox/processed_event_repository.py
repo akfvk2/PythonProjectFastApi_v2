@@ -19,10 +19,5 @@ class ProcessedEventRepository:
             .values(event_id=event_id)
             .on_conflict_do_nothing(index_elements=["event_id"])
         )
-        try:
-            result = await self.session.execute(stmt)
-        except OperationalError as exc:
-            raise RetryException(
-                f"Temporary DB error while marking event {event_id} as processed", retry_delay=5.0,
-            ) from exc
+        result = await self.session.execute(stmt)
         return result.rowcount > 0
