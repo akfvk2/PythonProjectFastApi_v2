@@ -9,10 +9,16 @@ from testcontainers.kafka import KafkaContainer
 from sqlalchemy import select, func
 from src.config import settings
 from src.students.consumer import (
-    _header, _attempt_number, _meta_headers, _remaining_delay,
+    _header, _attempt_number, _meta_headers,
     _process_message, _default_handler_factory,)
 from src.students.student_event_schemas import StudentEvent
 from src.inbox.processed_event_model import ProcessedEventModel
+import contextlib
+from sqlalchemy.pool import NullPool
+from sqlalchemy.ext.asyncio import create_async_engine
+from src.students.consumer import _consume
+from src.students.student_event_service import StudentEventService
+from src.inbox.processed_event_repository import ProcessedEventRepository
 
 
 class _FakeMessage:
@@ -41,14 +47,6 @@ class TestHeaderHelpers:
     def test_attempt_number_raises_on_malformed_header(self):
         with pytest.raises(ValueError):
             _attempt_number(_FakeMessage(headers=[("attempts", b"not-a-number")]))
-
-    def test_remaining_delay_zero_when_no_header(self):
-        assert _remaining_delay(_FakeMessage(headers=[])) == 0.0
-
-    def test_remaining_delay_computed_from_header(self):
-        future = time.time() + 100
-        msg = _FakeMessage(headers=[("retry_at", str(future).encode())])
-        assert 90 < _remaining_delay(msg) <= 100
 
     def test_meta_headers_prefers_original_source_over_current_message(self):
         msg = _FakeMessage(
@@ -142,3 +140,68 @@ class TestProcessMessage:
         dlq_message = await _consume_one(kafka_bootstrap_servers, settings.student_events_dlq_topic)
         headers = dict(dlq_message.headers)
         assert headers["attempts"] == b"1"
+
+class _CountingHandlerFactory:
+    def __init__(self):
+        self.call_count = 0
+
+    def __call__(self, session) -> StudentEventService:
+        self.call_count += 1
+        return StudentEventService(ProcessedEventRepository(session))
+
+@pytest_asyncio.fixture
+async def real_session_factory(db_url):
+    engine = create_async_engine(db_url, poolclass=NullPool)
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    yield factory
+    await engine.dispose()
+
+
+async def _wait_until_processed(session_factory, event_id, timeout: float = 10.0) -> bool:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        async with session_factory() as check_session:
+            result = await check_session.execute(
+                select(func.count()).select_from(ProcessedEventModel).where(ProcessedEventModel.event_id == event_id))
+            if result.scalar_one() > 0:
+                return True
+        await asyncio.sleep(0.2)
+    return False
+
+
+async def _run_briefly(coro, duration: float) -> None:
+    task = asyncio.create_task(coro)
+    await asyncio.sleep(duration)
+    task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await task
+
+
+class TestConsumeIntegration:
+    async def test_committed_offset_is_not_reprocessed_after_restart(self, real_session_factory, producer, kafka_bootstrap_servers):
+        topic = f"student-events-test-{uuid4()}"
+        group_id = f"test-group-{uuid4()}"
+        event = make_event()
+        await producer.send_and_wait(
+            topic, key=str(event.student_id).encode(), value=event.model_dump_json().encode("utf-8"))
+
+        handler_factory = _CountingHandlerFactory()
+
+        consume_task = asyncio.create_task(
+            _consume(topic, group_id, handler_factory, real_session_factory, tier_delay_seconds=None))
+        try:
+            processed = await _wait_until_processed(real_session_factory, event.event_id)
+        finally:
+            consume_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await consume_task
+
+        assert processed is True
+        assert handler_factory.call_count == 1
+
+        await _run_briefly(
+            _consume(topic, group_id, handler_factory, real_session_factory, tier_delay_seconds=None),
+            duration=3.0,
+        )
+
+        assert handler_factory.call_count == 1

@@ -40,14 +40,24 @@ def _meta_headers(message, exc: Exception, attempt: int) -> list[tuple[str, byte
         ("source_offset", (_header(message, "source_offset") or str(message.offset)).encode("utf-8")),
         ("attempts", str(attempt).encode("utf-8")),
     ]
+
+def _retry_tier_for_attempt(attempt: int) -> tuple[str, float]:
+    if attempt <= 1:
+        return settings.retry_tier_1_topic, settings.retry_tier_1_delay_seconds
+    return settings.retry_tier_2_topic, settings.retry_tier_2_delay_seconds
+
 def _check_retry_budget() -> None:
     limit_seconds = settings.max_poll_interval_seconds
-    if settings.max_retry_delay_seconds >= limit_seconds * 0.5:
+    largest_tier_delay = max(settings.retry_tier_1_delay_seconds, settings.retry_tier_2_delay_seconds)
+    if largest_tier_delay >= limit_seconds * settings.retry_budget_safety_margin:
         raise InvalidConfigurationError(
-            f"Retry budget ({settings.max_retry_delay_seconds}s) is too close to "
+            f"Retry budget ({largest_tier_delay}s) is too close to "
             f"max_poll_interval_seconds ({limit_seconds}s) — consumer would lose its partition."
             f"Lower max_attempts / max_retry_delay_seconds or raise max_poll_interval_seconds."
         )
+
+def _elapsed_since_produced(message) -> float:
+    return time.time() - (message.timestamp / 1000)
 
 async def _process_once(message, handler_factory: Callable[[AsyncSession], StudentEventService],
                         session_factory: async_sessionmaker[AsyncSession],) -> None:
@@ -59,7 +69,7 @@ async def _process_once(message, handler_factory: Callable[[AsyncSession], Stude
             await  handler.handle(event)
     except OperationalError as exc:
         raise RetryException(
-            f"Temporary DB error while processing event {event.event_id}", retry_delay=5.0,
+            f"Temporary DB error while processing event {event.event_id}", retry_delay=settings.db_error_retry_delay_seconds,
         ) from exc
 
 async def _send_to_dlq(producer: AIOKafkaProducer, message, exc: Exception, attempt: int) -> None:
@@ -71,15 +81,12 @@ async def _send_to_dlq(producer: AIOKafkaProducer, message, exc: Exception, atte
     )
 
 async def _schedule_retry(producer: AIOKafkaProducer, message, exc: RetryException, attempt: int) -> None:
-    requested_delay = exc.retry_delay if exc.retry_delay is not None else settings.retry_delay_seconds
-    delay = min(requested_delay, settings.max_retry_delay_seconds)
-    headers = _meta_headers(message, exc, attempt) + [("retry_at", str(time.time() + delay).encode("utf-8"))]
+    topic, _ = _retry_tier_for_attempt(attempt)
     await producer.send_and_wait(
-        settings.student_events_retry_topic,
+        topic,
         key=message.key,
         value=message.value,
-        headers=headers,
-    )
+        headers=_meta_headers(message, exc, attempt))
 
 async def _process_message(message, producer: AIOKafkaProducer, handler_factory: Callable[[AsyncSession], StudentEventService],
                            session_factory: async_sessionmaker[AsyncSession],) -> None:
@@ -103,21 +110,12 @@ async def _process_message(message, producer: AIOKafkaProducer, handler_factory:
         else:
             await _schedule_retry(producer, message, exc, attempt)
 
-
-
-
-def _remaining_delay(message) -> float:
-    retry_at = _header(message, "retry_at")
-    if retry_at is None:
-        return 0.0
-    return float(retry_at) - time.time()
-
 async def _consume(
     topic: str,
     group_id: str,
     handler_factory: Callable[[AsyncSession], StudentEventService],
     session_factory: async_sessionmaker[AsyncSession],
-    wait_for_retry_at: bool,
+    tier_delay_seconds: float | None = None,
 ) -> None:
     _check_retry_budget()
     consumer = AIOKafkaConsumer(
@@ -135,19 +133,10 @@ async def _consume(
     try:
         async for message in consumer:
             tp = TopicPartition(message.topic, message.partition)
-            if wait_for_retry_at:
-                try:
-                    remaining = _remaining_delay(message)
-                except ValueError as exc:
-                    logger.exception(f"Malformed 'retry_at' header for offset {message.offset}, sending straight to DLQ")
-                    await _send_to_dlq(producer, message, exc, attempt=1)
-                    await consumer.commit({tp: message.offset + 1})
-                    continue
+            if tier_delay_seconds is not None:
+                remaining = tier_delay_seconds - _elapsed_since_produced(message)
                 if remaining > 0:
-                    consumer.seek(tp, message.offset)
-                    consumer.pause(tp)
-                    loop.call_later(remaining, consumer.resume, tp)
-                    continue
+                    await asyncio.sleep(remaining)
             await _process_message(message, producer, handler_factory, session_factory)
             await consumer.commit({tp: message.offset + 1})
     finally:
@@ -160,12 +149,18 @@ async def run_student_events_consumer(
         session_factory: async_sessionmaker[AsyncSession] = SessionFactory,) -> None:
     await _consume(
         settings.student_events_topic, settings.student_events_group_id,
-        handler_factory, session_factory, wait_for_retry_at=False)
+        handler_factory, session_factory, tier_delay_seconds=None)
 
-async def run_student_events_retry_consumer(
-    handler_factory: Callable[[AsyncSession], StudentEventService] = _default_handler_factory,
-    session_factory: async_sessionmaker[AsyncSession] = SessionFactory,
-) -> None:
+async def run_student_events_retry_tier1_consumer(
+        handler_factory: Callable[[AsyncSession], StudentEventService] = _default_handler_factory,
+        session_factory: async_sessionmaker[AsyncSession] = SessionFactory,) -> None:
     await _consume(
-        settings.student_events_retry_topic, settings.student_events_retry_group_id,
-        handler_factory, session_factory, wait_for_retry_at=True)
+        settings.retry_tier_1_topic, settings.retry_tier_1_group_id,
+        handler_factory, session_factory, tier_delay_seconds=settings.retry_tier_1_delay_seconds)
+
+async def run_student_events_retry_tier2_consumer(
+        handler_factory: Callable[[AsyncSession], StudentEventService] = _default_handler_factory,
+        session_factory: async_sessionmaker[AsyncSession] = SessionFactory,) -> None:
+    await _consume(
+        settings.retry_tier_2_topic, settings.retry_tier_2_group_id,
+        handler_factory, session_factory, tier_delay_seconds=settings.retry_tier_2_delay_seconds)

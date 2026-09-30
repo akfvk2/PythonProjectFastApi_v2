@@ -1,4 +1,6 @@
 import logging
+
+from src.config import settings
 from src.students.student_event_schemas import StudentEvent
 from src.inbox.processed_event_repository import ProcessedEventRepository
 from sqlalchemy.exc import OperationalError
@@ -15,7 +17,7 @@ class StudentEventService:
             is_new = await self.repo.try_mark_processed(event.event_id)
         except OperationalError as exc:
             raise RetryException(
-                f"Temporary DB error while processing event {event.event_id}", retry_delay=5.0,
+                f"Temporary DB error while processing event {event.event_id}", retry_delay=settings.db_error_retry_delay_seconds
             ) from exc
         if not is_new:
             logger.info(f"Event {event.event_id} already processed, skipping duplicate")

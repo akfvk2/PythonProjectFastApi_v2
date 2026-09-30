@@ -2,7 +2,11 @@ import uvicorn
 import asyncio
 import argparse
 import logging
-from src.students.consumer import run_student_events_consumer, run_student_events_retry_consumer
+from src.students.consumer import (
+    run_student_events_consumer,
+    run_student_events_retry_tier1_consumer,
+    run_student_events_retry_tier2_consumer,
+)
 
 def _run_web() -> None:
     uvicorn.run(
@@ -15,7 +19,8 @@ def _run_web() -> None:
 async def _run_consumers() -> None:
     async with asyncio.TaskGroup() as tg:
         tg.create_task(run_student_events_consumer())
-        tg.create_task(run_student_events_retry_consumer())
+        tg.create_task(run_student_events_retry_tier1_consumer())
+        tg.create_task(run_student_events_retry_tier2_consumer())
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO)
